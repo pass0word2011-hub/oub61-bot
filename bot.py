@@ -1915,21 +1915,29 @@ async def text_handler(update, context):
     await update.message.reply_text('❓ Я не понял эту команду.\n\nИспользуйте кнопки меню.',reply_markup=main_keyboard(uid))
 
 async def error_handler(update, context):
-    err=context.error
+    import traceback
+
+    err = context.error
+
     if isinstance(err, RetryAfter):
         print(f"[Telegram] Flood limit: повтор через {err.retry_after} сек.")
         return
+
     if isinstance(err, NetworkError):
         print(f"[Telegram] Временная сетевая ошибка: {err}. Бот продолжит попытки.")
         return
+
     if isinstance(err, TelegramError):
         print(f"[Telegram] Ошибка API: {type(err).__name__}: {err}")
         return
+
     if isinstance(err, pymysql.MySQLError):
         print(f"[MySQL] Ошибка базы: {type(err).__name__}: {err}")
+        traceback.print_exc()
         return
-    print(f"[BOT] Необработанная ошибка: {type(err).__name__}: {err}")
 
+    print(f"[BOT] Необработанная ошибка: {type(err).__name__}: {err}")
+    traceback.print_exc()
 
 # ============================================================
 # ЗАПУСК
