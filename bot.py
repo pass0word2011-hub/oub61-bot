@@ -930,41 +930,119 @@ def fetch_url_sync(url):
 
 
 def replace_week_schedule(monday, rows):
-    dates={(monday+timedelta(days=i)).isoformat() for i in range(7)}
-    conn=db(); cur=conn.cursor()
+    dates = {(monday + timedelta(days=i)).isoformat() for i in range(7)}
+    conn = db()
+    cur = conn.cursor()
+
     try:
         cur.execute('BEGIN')
-        manual_dates = (
-    {
-        r[0]
-        for r in cur.execute(
-            f"SELECT lesson_date FROM manual_schedule_days WHERE lesson_date IN ({','.join(['?'] * len(dates))})",
-            tuple(sorted(dates))
-        ).fetchall()
-    }
-    if dates else set()
-                )        
+
+        manual_dates = set()
+
+        if dates:
+            placeholders = ",".join(["%s"] * len(dates))
+            cur.execute(
+                f"""
+                SELECT lesson_date
+                FROM manual_schedule_days
+                WHERE lesson_date IN ({placeholders})
+                """,
+                tuple(sorted(dates))
+            )
+
+            manual_dates = {r[0] for r in cur.fetchall()}
+
         for ds in dates:
             if ds in manual_dates:
                 continue
-            cur.execute('DELETE FROM schedule_entries WHERE lesson_date=?',(ds,))
-            cur.execute('DELETE FROM schedule_sync WHERE lesson_date=?',(ds,))
-        grouped={d:[] for d in dates}
+
+            cur.execute(
+                'DELETE FROM schedule_entries WHERE lesson_date=%s',
+                (ds,)
+            )
+
+            cur.execute(
+                'DELETE FROM schedule_sync WHERE lesson_date=%s',
+                (ds,)
+            )
+
+        grouped = {d: [] for d in dates}
+
         for r in rows:
-            grouped.setdefault(r['lesson_date'],[]).append(r)
+            grouped.setdefault(r['lesson_date'], []).append(r)
+
         for ds in sorted(dates):
             if ds in manual_dates:
                 continue
-            dayrows=grouped.get(ds,[])
-            h=_hash_schedule(dayrows)
+
+            dayrows = grouped.get(ds, [])
+            h = _hash_schedule(dayrows)
+
             for r in dayrows:
-                variants=r.get('lessons') or [{'subject':r.get('subject',''),'teacher':r.get('teacher',''),'room':r.get('room',''),'lesson_type':''}]
-                first=variants[0]
-                cur.execute('''INSERT INTO schedule_entries(lesson_date,pair_number,subject,teacher,room,start_time,end_time,lessons_json)
-                               VALUES(?,?,?,?,?,?,?,?)''',
-                            (r['lesson_date'],r['pair_number'],first.get('subject',''),first.get('teacher',''),first.get('room',''),r.get('start_time',''),r.get('end_time',''),json.dumps(variants,ensure_ascii=False)))
-            cur.execute('INSERT INTO schedule_sync(lesson_date,content_hash,last_success,no_school) VALUES(?,?,?,?)',
-                        (ds,h,now_iso(),1 if not dayrows else 0))
+                variants = r.get('lessons') or [{
+                    'subject': r.get('subject', ''),
+                    'teacher': r.get('teacher', ''),
+                    'room': r.get('room', ''),
+                    'lesson_type': ''
+                }]
+
+                first = variants[0]
+
+                cur.execute(
+                    '''
+                    INSERT INTO schedule_entries(
+                        lesson_date,
+                        pair_number,
+                        subject,
+                        teacher,
+                        room,
+                        start_time,
+                        end_time,
+                        lessons_json
+                    )
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s)
+                    ''',
+                    (
+                        r['lesson_date'],
+                        r['pair_number'],
+                        first.get('subject', ''),
+                        first.get('teacher', ''),
+                        first.get('room', ''),
+                        r.get('start_time', ''),
+                        r.get('end_time', ''),
+                        json.dumps(
+                            variants,
+                            ensure_ascii=False
+                        )
+                    )
+                )
+
+            cur.execute(
+                '''
+                INSERT INTO schedule_sync(
+                    lesson_date,
+                    content_hash,
+                    last_success,
+                    no_school
+                )
+                VALUES(%s,%s,%s,%s)
+                ''',
+                (
+                    ds,
+                    h,
+                    now_iso(),
+                    1 if not dayrows else 0
+                )
+            )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
             # Если пользователь указал общий статус до загрузки расписания,
             # переносим его на реальные пары после появления расписания.
