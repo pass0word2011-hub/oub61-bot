@@ -928,7 +928,6 @@ def fetch_url_sync(url):
         if ct: charset=ct
         return data.decode(charset,errors='replace')
 
-
 def replace_week_schedule(monday, rows):
     dates = {(monday + timedelta(days=i)).isoformat() for i in range(7)}
     conn = db()
@@ -949,10 +948,14 @@ def replace_week_schedule(monday, rows):
                 """,
                 tuple(sorted(dates))
             )
-
             manual_dates = {r[0] for r in cur.fetchall()}
 
-        for ds in dates:
+        grouped = {d: [] for d in dates}
+
+        for r in rows:
+            grouped.setdefault(r['lesson_date'], []).append(r)
+
+        for ds in sorted(dates):
             if ds in manual_dates:
                 continue
 
@@ -965,15 +968,6 @@ def replace_week_schedule(monday, rows):
                 'DELETE FROM schedule_sync WHERE lesson_date=%s',
                 (ds,)
             )
-
-        grouped = {d: [] for d in dates}
-
-        for r in rows:
-            grouped.setdefault(r['lesson_date'], []).append(r)
-
-        for ds in sorted(dates):
-            if ds in manual_dates:
-                continue
 
             dayrows = grouped.get(ds, [])
             h = _hash_schedule(dayrows)
@@ -1010,10 +1004,7 @@ def replace_week_schedule(monday, rows):
                         first.get('room', ''),
                         r.get('start_time', ''),
                         r.get('end_time', ''),
-                        json.dumps(
-                            variants,
-                            ensure_ascii=False
-                        )
+                        json.dumps(variants, ensure_ascii=False)
                     )
                 )
 
@@ -1035,6 +1026,72 @@ def replace_week_schedule(monday, rows):
                 )
             )
 
+            pending = cur.execute(
+                'SELECT * FROM attendance WHERE attendance_date=%s AND pair_number=-1',
+                (ds,)
+            ).fetchall()
+
+            for mark in pending:
+                for lesson in dayrows:
+                    existing = cur.execute(
+                        '''
+                        SELECT id
+                        FROM attendance
+                        WHERE attendance_date=%s
+                          AND user_id=%s
+                          AND pair_number=%s
+                        ''',
+                        (
+                            ds,
+                            mark['user_id'],
+                            lesson['pair_number']
+                        )
+                    ).fetchone()
+
+                    if existing:
+                        cur.execute(
+                            '''
+                            UPDATE attendance
+                            SET status=%s,
+                                comment=%s,
+                                updated_at=%s
+                            WHERE id=%s
+                            ''',
+                            (
+                                mark['status'],
+                                mark['comment'],
+                                now_iso(),
+                                existing['id']
+                            )
+                        )
+                    else:
+                        cur.execute(
+                            '''
+                            INSERT INTO attendance(
+                                attendance_date,
+                                user_id,
+                                pair_number,
+                                status,
+                                comment,
+                                updated_at
+                            )
+                            VALUES(%s,%s,%s,%s,%s,%s)
+                            ''',
+                            (
+                                ds,
+                                mark['user_id'],
+                                lesson['pair_number'],
+                                mark['status'],
+                                mark['comment'],
+                                now_iso()
+                            )
+                        )
+
+                cur.execute(
+                    'DELETE FROM attendance WHERE id=%s',
+                    (mark['id'],)
+                )
+
         conn.commit()
 
     except Exception:
@@ -1043,33 +1100,6 @@ def replace_week_schedule(monday, rows):
 
     finally:
         conn.close()
-
-            # Если пользователь указал общий статус до загрузки расписания,
-            # переносим его на реальные пары после появления расписания.
-            pending = cur.execute(
-                'SELECT * FROM attendance WHERE attendance_date=? AND pair_number=-1', (ds,)
-            ).fetchall()
-            for mark in pending:
-                for lesson in dayrows:
-                    existing = cur.execute(
-                        'SELECT id FROM attendance WHERE attendance_date=? AND user_id=? AND pair_number=?',
-                        (ds, mark['user_id'], lesson['pair_number'])
-                    ).fetchone()
-                    if existing:
-                        cur.execute(
-                            'UPDATE attendance SET status=?,comment=?,updated_at=? WHERE id=?',
-                            (mark['status'], mark['comment'], now_iso(), existing['id'])
-                        )
-                    else:
-                        cur.execute(
-                            'INSERT INTO attendance(attendance_date,user_id,pair_number,status,comment,updated_at) VALUES(?,?,?,?,?,?)',
-                            (ds, mark['user_id'], lesson['pair_number'], mark['status'], mark['comment'], now_iso())
-                        )
-                cur.execute('DELETE FROM attendance WHERE id=?', (mark['id'],))
-        conn.commit()
-    except Exception:
-        conn.rollback(); raise
-    finally: conn.close()
 
 def update_week_if_changed(monday, rows):
     dates={(monday+timedelta(days=i)).isoformat() for i in range(7)}
