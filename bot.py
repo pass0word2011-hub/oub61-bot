@@ -280,8 +280,8 @@ def create_user(tg_id, full_name):
 def get_setting(key, default=None):
     conn = db()
     row = conn.execute(
-        "SELECT value FROM global_settings WHERE key=?",
-        (key,)
+        "SELECT `value` FROM settings WHERE `key`=%s",
+    (key,)
     ).fetchone()
     conn.close()
 
