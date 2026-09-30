@@ -934,7 +934,16 @@ def replace_week_schedule(monday, rows):
     conn=db(); cur=conn.cursor()
     try:
         cur.execute('BEGIN')
-        manual_dates={r[0] for r in cur.execute("SELECT lesson_date FROM manual_schedule_days WHERE lesson_date IN (%s)" % ",".join("?"*len(dates)), tuple(sorted(dates))).fetchall()} if dates else set()
+        manual_dates = (
+    {
+        r[0]
+        for r in cur.execute(
+            f"SELECT lesson_date FROM manual_schedule_days WHERE lesson_date IN ({','.join(['?'] * len(dates))})",
+            tuple(sorted(dates))
+        ).fetchall()
+    }
+    if dates else set()
+                )        
         for ds in dates:
             if ds in manual_dates:
                 continue
