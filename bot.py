@@ -213,10 +213,18 @@ def is_admin(user_id):
 
 def get_user(tg_id):
     conn = db()
-    user = conn.execute("SELECT * FROM users WHERE telegram_id=?", (tg_id,)).fetchone()
+    user = conn.execute(
+        "SELECT * FROM users WHERE telegram_id=?",
+        (tg_id,)
+    ).fetchone()
+
     if user:
-        conn.execute("INSERT IGNORE INTO settings(user_id) VALUES(?)", (user["id"],))
+        conn.execute(
+            "INSERT IGNORE INTO settings(user_id) VALUES(?)",
+            (user["id"],)
+        )
         conn.commit()
+
     conn.close()
     return user
 
@@ -224,20 +232,36 @@ def get_user(tg_id):
 def create_user(tg_id, full_name):
     conn = db()
     cur = conn.cursor()
-    cur.execute("INSERT IGNORE INTO users(telegram_id,full_name,created_at) VALUES(%s,%s,%s)",
-                (tg_id, full_name, now_iso()))
-    user = cur.execute("SELECT id FROM users WHERE telegram_id=?", (tg_id,)).fetchone()
-    cur.execute("INSERT IGNORE INTO settings(user_id) VALUES(?)", (user["id"],))
+
+    cur.execute(
+        "INSERT IGNORE INTO users(telegram_id,full_name,created_at) VALUES(%s,%s,%s)",
+        (tg_id, full_name, now_iso())
+    )
+
+    cur.execute(
+        "SELECT id FROM users WHERE telegram_id=%s",
+        (tg_id,)
+    )
+    user = cur.fetchone()
+
+    if user:
+        cur.execute(
+            "INSERT IGNORE INTO settings(user_id) VALUES(%s)",
+            (user["id"],)
+        )
+
     conn.commit()
     conn.close()
 
-
 def get_setting(key, default=None):
     conn = db()
-    row = conn.execute("SELECT value FROM global_settings WHERE key=?", (key,)).fetchone()
+    row = conn.execute(
+        "SELECT value FROM global_settings WHERE key=?",
+        (key,)
+    ).fetchone()
     conn.close()
-    return row["value"] if row else default
 
+    return row["value"] if row else default
 
 def set_setting(key, value):
     conn = db()
