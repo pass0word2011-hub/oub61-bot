@@ -1026,10 +1026,11 @@ def replace_week_schedule(monday, rows):
                 )
             )
 
-            pending = cur.execute(
+            cur.execute(
                 'SELECT * FROM attendance WHERE attendance_date=%s AND pair_number=-1',
                 (ds,)
-            ).fetchall()
+            )
+            pending = cur.fetchall()
 
             for mark in pending:
                 for lesson in dayrows:
