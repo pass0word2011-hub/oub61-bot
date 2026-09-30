@@ -224,7 +224,7 @@ def get_user(tg_id):
 def create_user(tg_id, full_name):
     conn = db()
     cur = conn.cursor()
-    cur.execute("INSERT IGNORE INTO users(telegram_id,full_name,created_at) VALUES(?,?,?)",
+    cur.execute("INSERT IGNORE INTO users(telegram_id,full_name,created_at) VALUES(%s,%s,%s)",
                 (tg_id, full_name, now_iso()))
     user = cur.execute("SELECT id FROM users WHERE telegram_id=?", (tg_id,)).fetchone()
     cur.execute("INSERT IGNORE INTO settings(user_id) VALUES(?)", (user["id"],))
