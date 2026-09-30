@@ -1020,7 +1020,9 @@ async def sync_arcotel_once(include_future=True):
             else:
                 print(f'[Arcotel] {wm}: страница не похожа на таблицу расписания — старые данные сохранены')
         except Exception as e:
+            import traceback
             print(f'[Arcotel] {wm}: {type(e).__name__}: {e}')
+            traceback.print_exc()
     if loaded:
         set_setting('arcotel_last_success',now_iso())
         set_setting('arcotel_last_loaded',','.join(f'{d.isoformat()}={n}' for d,n in loaded))
